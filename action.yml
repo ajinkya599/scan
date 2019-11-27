@@ -1,0 +1,14 @@
+name: 'Scan Docker image'
+description: 'Scan Docker image using Clair'
+inputs: 
+  image-to-scan:
+    description: 'Docker image to scan'
+    required: true
+
+outputs:
+  scan-report:
+    description: 'File name where the scan results are stored.'
+
+runs:
+  using: 'node12'
+  main: 'lib/main.js'
