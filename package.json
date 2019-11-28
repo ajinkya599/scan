@@ -22,6 +22,8 @@
     "typescript": "^3.7.2"
   },
   "dependencies": {
-    "@actions/core": "^1.2.0"
+    "@actions/core": "^1.2.0",
+    "download": "^7.1.0",
+    "fs": "0.0.1-security"
   }
 }
