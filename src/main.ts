@@ -34,27 +34,33 @@ async function run() {
     //   output += data;
     // });
 
-    const options: ExecOptions = {
-      env: {
-        'CLAIR_ADDR': 'localhost:6060',
-      },
-      // errStream: stdErrStream,
-      // outStream: stdOutStream,
-      ignoreReturnCode: true
-    };
+    var klarEnv: { [key: string]: string ; } = {};
+    // klarEnv = Object.assign({}, process.env);
+    for (let key in process.env) {
+      klarEnv[key] = process.env[key] || '';
+    }
+
+    klarEnv['CLAIR_ADDR'] = 'localhost:6060';
 
     const whitelistFile = core.getInput('whitelist-file');
     if (whitelistFile) {
-      options.env['WHITELIST_FILE'] = whitelistFile;
+      klarEnv['WHITELIST_FILE'] = whitelistFile;
     }
 
     const username = core.getInput('username');
     const password = core.getInput('password');
 
     if (username && password) {
-      options.env['DOCKER_USER'] = username;
-      options.env['DOCKER_PASSWORD'] = password;
+      klarEnv['DOCKER_USER'] = username;
+      klarEnv['DOCKER_PASSWORD'] = password;
     }
+
+    const options: ExecOptions = {
+      env: klarEnv,
+      // errStream: stdErrStream,
+      // outStream: stdOutStream,
+      ignoreReturnCode: true
+    };
   
     const toolRunner = new ToolRunner(klarDownloadPath, [ imageToScan ], options);
     const code = await toolRunner.exec();
