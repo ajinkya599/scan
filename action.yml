@@ -4,6 +4,9 @@ inputs:
   image-to-scan:
     description: 'Docker image to scan'
     required: true
+  whitelist-file:
+    description: 'Path to the whitelist file'
+    required: false
 
 outputs:
   scan-report:

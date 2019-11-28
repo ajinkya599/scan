@@ -23,25 +23,30 @@ async function run() {
     console.log("Scanning image: ", imageToScan);
     let error = "";
     let output = "";
-    let stdErrStream = new Stream.Writable();
-    let stdOutStream = new Stream.Writable();
+    // let stdErrStream = new Stream.Writable();
+    // let stdOutStream = new Stream.Writable();
 
-    stdErrStream.on('data', (data: string) => {
-      error += data;
-    });
+    // stdErrStream.on('data', (data: string) => {
+    //   error += data;
+    // });
 
-    stdOutStream.on('data', (data: string) => {
-      output += data;
-    });
+    // stdOutStream.on('data', (data: string) => {
+    //   output += data;
+    // });
 
     const options: ExecOptions = {
       env: {
-        'CLAIR_ADDR': 'localhost:6060'
+        'CLAIR_ADDR': 'localhost:6060',
       },
-      errStream: stdErrStream,
-      outStream: stdOutStream,
+      // errStream: stdErrStream,
+      // outStream: stdOutStream,
       ignoreReturnCode: true
     };
+
+    const whitelistFile = core.getInput('whitelist-file');
+    if (whitelistFile) {
+      options.env['WHITELIST_FILE'] = whitelistFile;
+    }
 
     const toolRunner = new ToolRunner(klarDownloadPath, [ imageToScan ], options);
     const code = await toolRunner.exec();
