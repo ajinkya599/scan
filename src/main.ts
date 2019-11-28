@@ -15,6 +15,43 @@ async function downloadKlar() {
     })
 }
 
+async function downloadWhiteListFile(branch: string, path: string, token: string) {
+  const whitelistFileUrl = `https://raw.githubusercontent.com/${process.env.GITHUB_REPOSITORY}/${branch}/${path}`;
+  const parts = path.split('/');
+  const whitelistFileName = parts[parts.length-1];
+  const whitelistFileDownloadDir = `${process.env['GITHUB_WORKSPACE']}/_temp/containerscan`;
+  console.log('whitelistFileUrl: ', whitelistFileUrl);
+  console.log('whitelistFileName: ', whitelistFileName);
+  console.log('whitelistFileDownloadDir: ', whitelistFileDownloadDir);
+  console.log('token: ', token);
+  return download(whitelistFileUrl, whitelistFileDownloadDir, { headers: { Authorization: `token ${token}` } }).then(() => {
+    return `${whitelistFileDownloadDir}/${whitelistFileName}`;
+  })
+}
+
+async function getWhitelistFile() {
+  const whitelistPath = core.getInput('whitelist-file');
+  if (!whitelistPath) {
+    return '';
+  }
+
+  const whitelistFromBranch = core.getInput('whitelist-from-branch');
+  const githubToken = core.getInput('github-token');
+
+  if (!whitelistFromBranch || !githubToken) {
+    console.log('whitelist-from-branch input not provided. Using the whitelist from the current branch...');
+    return `${process.env.GITHUB_WORKSPACE}/${whitelistPath}`;
+  }  
+  else if (!githubToken) {
+    console.log('github-token input not provided. Using the whitelist from the current branch...');
+    return `${process.env.GITHUB_WORKSPACE}/${whitelistPath}`;
+  }
+  else {
+    console.log(`Downloading the whitelist file from branch: ${whitelistFromBranch}...`);
+    return downloadWhiteListFile(whitelistFromBranch, whitelistPath, githubToken);
+  }
+}
+
 async function run() {
   try {
     const klarDownloadPath = await downloadKlar();
@@ -40,9 +77,10 @@ async function run() {
       klarEnv[key] = process.env[key] || '';
     }
 
-    klarEnv['CLAIR_ADDR'] = 'localhost:6060';
+    klarEnv['CLAIR_ADDR'] = 'http://13.71.116.186:6060';
 
-    const whitelistFile = core.getInput('whitelist-file');
+    const whitelistFile = await getWhitelistFile();
+    // const whitelistFile = core.getInput('whitelist-file');
     if (whitelistFile) {
       klarEnv['WHITELIST_FILE'] = whitelistFile;
     }
@@ -69,23 +107,14 @@ async function run() {
       console.log('Found 0 vulnerabilities');
     }
     else if (code == 1) {
-      console.log('Found vulnerabilities: ');
-      console.log('stderr: ', error);
-      console.log('stdout: ', output);
-      // throw new Error('Found vulnerabilities');
+      console.log('Found vulnerabilities in the container image');
+      // console.log('stderr: ', error);
+      // console.log('stdout: ', output);
+      throw new Error('Found vulnerabilities in the container image');
     }
     else {
       throw new Error('An error occured while scanning the image for vulnerabilities.');
     }
-    // const nameToGreet = core.getInput('who-to-greet');
-    // if (nameToGreet == 'Octocat') {
-    //     // the Octocat doesn't want to be greeted here!
-    //     throw new Error("No Octocat greetings, please.");
-    // } else {
-    //     console.log(`Hello ${nameToGreet}!`);
-    //     const time = (new Date()).toTimeString();
-    //     core.setOutput("time", time);
-    // }
   } catch (error) {
     core.setFailed(error.message);
   }

@@ -13,6 +13,10 @@ inputs:
   password:
     description: 'Password to authenticate to the Docker registry'
     required: false
+  github-token:
+    description: 'Pass GITHUB_TOKEN. Task needs to access contents of the repo'
+  whitelist-from-branch:
+    description: 'The branch to read the whitelist from'
 
 outputs:
   scan-report:
