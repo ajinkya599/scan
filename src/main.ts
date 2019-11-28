@@ -48,6 +48,14 @@ async function run() {
       options.env['WHITELIST_FILE'] = whitelistFile;
     }
 
+    const username = core.getInput('username');
+    const password = core.getInput('password');
+
+    if (username && password) {
+      options.env['DOCKER_USER'] = username;
+      options.env['DOCKER_PASSWORD'] = password;
+    }
+  
     const toolRunner = new ToolRunner(klarDownloadPath, [ imageToScan ], options);
     const code = await toolRunner.exec();
     

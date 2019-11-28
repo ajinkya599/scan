@@ -7,6 +7,12 @@ inputs:
   whitelist-file:
     description: 'Path to the whitelist file'
     required: false
+  username:
+    description: 'Username to authenticate to the Docker registry'
+    required: false
+  password:
+    description: 'Password to authenticate to the Docker registry'
+    required: false
 
 outputs:
   scan-report:
