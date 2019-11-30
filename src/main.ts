@@ -1,8 +1,10 @@
 import * as core from '@actions/core';
 import * as fs from 'fs';
-import { ToolRunner } from "@actions/exec/lib/toolrunner";
+import { ToolRunner } from '@actions/exec/lib/toolrunner';
 import { ExecOptions } from '@actions/exec/lib/interfaces';
 import * as Stream from 'stream';
+import { HttpClient } from 'typed-rest-client/HttpClient';
+import * as querystring from 'querystring';
 const download = require('download');
 
 async function downloadKlar() {
@@ -29,31 +31,103 @@ async function downloadWhiteListFile(branch: string, path: string, token: string
   })
 }
 
-async function getWhitelistFile() {
+async function getWhitelistFilePath() {
   const whitelistPath = core.getInput('whitelist-file');
   if (!whitelistPath) {
     return '';
   }
 
-  const whitelistFromBranch = core.getInput('whitelist-from-branch');
   const githubToken = core.getInput('github-token');
 
-  if (!whitelistFromBranch || !githubToken) {
-    console.log('whitelist-from-branch input not provided. Using the whitelist from the current branch...');
-    return `${process.env.GITHUB_WORKSPACE}/${whitelistPath}`;
-  }  
-  else if (!githubToken) {
+  if (!githubToken) {
     console.log('github-token input not provided. Using the whitelist from the current branch...');
     return `${process.env.GITHUB_WORKSPACE}/${whitelistPath}`;
   }
   else {
-    console.log(`Downloading the whitelist file from branch: ${whitelistFromBranch}...`);
-    return downloadWhiteListFile(whitelistFromBranch, whitelistPath, githubToken);
+    const whitelistFromBranch = core.getInput('whitelist-from-branch') || process.env.GITHUB_BASE_REF;
+    if (whitelistFromBranch) {
+      console.log(`Downloading the whitelist file from branch: ${whitelistFromBranch}`);
+      return downloadWhiteListFile(whitelistFromBranch, whitelistPath, githubToken);
+    }
+    else {
+      console.log('whitelist-from-branch is not specified, and it seems this is not a PR build. Using the whitelist from the current branch...');
+      return `${process.env.GITHUB_WORKSPACE}/${whitelistPath}`;
+    }
+  }
+}
+
+function getPullRequestHeadShaFromEventPayload(): string {
+  let pullRequestSha = '';
+  const eventPayloadPath = process.env.GITHUB_EVENT_PATH;
+  //~~ make these debug logs instead of console logs.
+  if (eventPayloadPath) {
+    const fileContent = fs.readFileSync(eventPayloadPath, { encoding: 'utf-8' });
+    try {
+      const eventJson = JSON.parse(fileContent);
+      console.log('eventJson: ', eventJson);
+
+      if (eventJson && eventJson.pull_request && eventJson.pull_request.head && eventJson.pull_request.head.sha) {
+        pullRequestSha = eventJson.pull_request.head.sha;
+        console.log('Obtained pull request head commit sha from the event payload: ', pullRequestSha);
+      }
+      else {
+        console.log('Pull request head commit sha not present in the event payload. Skipping pull request status update...');
+      }
+    }
+    catch(error) {
+      console.log('An error occured while parsing the contents of the event payload. Skipping pull request status update. Error: ', error);
+    }
+  }
+  else {
+    console.log('GITHUB_EVENT_PATH is empty. Unable to obtain SHA of the pull request\'s most recent commit.\n Skipping pull request status update...');
+  }
+
+  return pullRequestSha;
+}
+
+async function updateCommitStatus(state: string, description: string) {
+  const githubToken = core.getInput('github-token');
+  if (!githubToken) {
+    return '';
+  }
+
+  const pullRequestHeadSha = getPullRequestHeadShaFromEventPayload();
+  const requestUri = `https://api.github.com/repos/${process.env.GITHUB_REPOSITORY}/statuses/${pullRequestHeadSha}`;
+  console.log("requestUri: ", requestUri);
+  const requestBody = {
+    state: state,
+    target_url: `https://github.com/${process.env.GITHUB_REPOSITORY}/commit/${pullRequestHeadSha}/checks`,
+    description: description,
+    context: "container-scan"
+  }
+
+  const requestHeaders = {
+    Authorization: `token ${githubToken}`
+  };
+
+  const httpClient = new HttpClient('GITHUB_RUNNER');
+  try {
+    console.log('Trying to update the status of container scan..');
+    const response = await httpClient.request("POST", requestUri, JSON.stringify(requestBody), requestHeaders);
+    const body = await response.readBody();
+    console.log('Response after update. Statuscode: ', response.message.statusCode, '. StatusMessage: ', response.message.statusMessage, '. Body: ', body);//~~make this debug log
+  }
+  catch(error) {
+    console.log('An error occured while updating the status: ', error);
   }
 }
 
 async function run() {
-  try {
+  try {    
+    // console.log("SECRETS_GITHUB_TOKEN", process.env.SECRETS_GITHUB_TOKEN);
+    // console.log("GITHUB_BASE_REF", process.env.GITHUB_BASE_REF);
+    // console.log("GITHUB_SHA", process.env.GITHUB_SHA);
+    // console.log("GITHUB_REF", process.env.GITHUB_REF);
+    // console.log("GITHUB_EVENT_PATH", process.env.GITHUB_EVENT_PATH);
+    // console.log("Trying to extract the pull request commit from the GitHub Event payload...");
+    // const prSha = getPullRequestHeadShaFromEventPayload();
+    // console.log("Extracted prSha: ", prSha);
+    
     const klarDownloadPath = await downloadKlar();
     console.log("klarDownloadPath: ", klarDownloadPath);
     const imageToScan = core.getInput('image-to-scan');
@@ -79,7 +153,7 @@ async function run() {
 
     klarEnv['CLAIR_ADDR'] = 'http://13.71.116.186:6060';
 
-    const whitelistFile = await getWhitelistFile();
+    const whitelistFile = await getWhitelistFilePath();
     // const whitelistFile = core.getInput('whitelist-file');
     if (whitelistFile) {
       klarEnv['WHITELIST_FILE'] = whitelistFile;
@@ -105,14 +179,17 @@ async function run() {
     
     if (code == 0) {
       console.log('Found 0 vulnerabilities');
+      updateCommitStatus('success', 'Found 0 vulnerabilities in the container image');
     }
     else if (code == 1) {
       console.log('Found vulnerabilities in the container image');
+      updateCommitStatus('failure', 'Found vulnerabilities in the container image');
       // console.log('stderr: ', error);
       // console.log('stdout: ', output);
       throw new Error('Found vulnerabilities in the container image');
     }
     else {
+      updateCommitStatus('error', 'An error occured while scanning the image for vulnerabilities.');
       throw new Error('An error occured while scanning the image for vulnerabilities.');
     }
   } catch (error) {

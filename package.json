@@ -26,6 +26,7 @@
     "@actions/exec": "^1.0.1",
     "download": "^7.1.0",
     "fs": "^0.0.1-security",
-    "stream": "^0.0.2"
+    "stream": "^0.0.2",
+    "typed-rest-client": "^1.5.0"
   }
 }
