@@ -1,10 +1,11 @@
-import * as core from '@actions/core';
 import * as fs from 'fs';
-import { ToolRunner } from '@actions/exec/lib/toolrunner';
-import { ExecOptions } from '@actions/exec/lib/interfaces';
 import * as Stream from 'stream';
-import { HttpClient } from 'typed-rest-client/HttpClient';
 import * as querystring from 'querystring';
+import * as core from '@actions/core';
+import { ExecOptions } from '@actions/exec/lib/interfaces';
+import { DockerHelper } from './dockerHelper';
+import { HttpClient } from 'typed-rest-client/HttpClient';
+import { ToolRunner } from '@actions/exec/lib/toolrunner';
 const download = require('download');
 
 async function downloadKlar() {
@@ -151,8 +152,39 @@ function getVulnerabilitiesSummary(output: string): string {
       });
     }
   }
-  
+
   return summary;
+}
+
+async function setupClairServer() {
+  try {
+    console.log('Setting up Clair server for image scanning...');
+    const dockerHelper = new DockerHelper();
+    // Create Docker network
+    console.log('Creating Docker network...');
+    await dockerHelper.executeDockerCommand([ 'network', 'create', 'scannetwork', '--subnet=172.28.0.0/16', '--ip-range=172.28.5.0/24' ]);
+    console.log('Docker network created...');
+
+    // Create clair-db container
+    console.log('Creating clair-db container...'); 
+    await dockerHelper.executeDockerCommand([ 'run', '-d', '--network', 'scannetwork', '--network-alias', 'postgres', '--name', 'clair-db', 'arminc/clair-db:latest' ]);
+    console.log('Created clair-db container...');
+
+    // Create clair-local-scan container
+    console.log('Creating clair-local-scan container...');
+    await dockerHelper.executeDockerCommand([ 'run', '-p', '6060:6060', '--network', 'scannetwork', '-d', '--name', 'clair-local-scan', 'arminc/clair-local-scan:latest' ]);
+    console.log('Created clair-local-scan container...');
+    console.log('Clair server is up and running...');
+  }
+  catch(error) {
+    const errorMessage = `An error occured while setting up resources for container scanning. Error: ${error}`;
+    console.log(errorMessage);
+    throw(errorMessage);
+  }
+}
+
+async function cleanupClairResources() {
+
 }
 
 async function run() {
@@ -165,6 +197,8 @@ async function run() {
     // console.log("Trying to extract the pull request commit from the GitHub Event payload...");
     // const prSha = getPullRequestHeadShaFromEventPayload();
     // console.log("Extracted prSha: ", prSha);
+
+    await setupClairServer();
     
     const klarDownloadPath = await downloadKlar();
     console.log("klarDownloadPath: ", klarDownloadPath);
@@ -199,7 +233,8 @@ async function run() {
     //   klarEnv[key] = process.env[key] || '';
     // }
 
-    klarEnv['CLAIR_ADDR'] = 'http://13.71.116.186:6060';
+    // klarEnv['CLAIR_ADDR'] = 'http://13.71.116.186:6060';
+    klarEnv['CLAIR_ADDR'] = 'http://localhost:6060';
 
     const whitelistFile = await getWhitelistFilePath();
     if (whitelistFile) {
@@ -237,7 +272,6 @@ async function run() {
     }
     else if (code == 1) {
       const summary = getVulnerabilitiesSummary(klarOutput);
-      console.log(summary);
       updateCommitStatus('failure', summary);
       throw new Error(summary);
     }
