@@ -6,7 +6,7 @@ export class DockerHelper {
     public async executeDockerCommand(args: string[]) {
         const dockerPath = await io.which('docker', true);
         const options: ExecOptions = {
-            silent: true
+            silent: false
         };
 
         const dockerCommand = new ToolRunner(dockerPath, args, options);

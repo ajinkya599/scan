@@ -165,6 +165,11 @@ async function setupClairServer() {
     await dockerHelper.executeDockerCommand([ 'network', 'create', 'scannetwork', '--subnet=172.28.0.0/16', '--ip-range=172.28.5.0/24' ]);
     console.log('Docker network created...');
 
+    // Create local registry
+    console.log('Creating registry container...'); 
+    await dockerHelper.executeDockerCommand([ 'run', '-p', '5000:5000', '--restart=always', '-d', '--network', 'scannetwork', '--name', 'registry-local', 'registry:2' ]);
+    console.log('Created registry container...');
+
     // Create clair-db container
     console.log('Creating clair-db container...'); 
     await dockerHelper.executeDockerCommand([ 'run', '-d', '--network', 'scannetwork', '--network-alias', 'postgres', '--name', 'clair-db', 'arminc/clair-db:latest' ]);
@@ -172,7 +177,7 @@ async function setupClairServer() {
 
     // Create clair-local-scan container
     console.log('Creating clair-local-scan container...');
-    await dockerHelper.executeDockerCommand([ 'run', '-p', '6060:6060', '--network', 'scannetwork', '-d', '--name', 'clair-local-scan', 'arminc/clair-local-scan:latest' ]);
+    await dockerHelper.executeDockerCommand([ 'run', '-p', '6060:6060', '--network', 'scannetwork', '-d', '--name', 'clair-local-scan', 'arminc/clair-local-scan:latest', '--insecure-tls' ]);
     console.log('Created clair-local-scan container...');
     console.log('Clair server is up and running...');
   }
@@ -235,6 +240,7 @@ async function run() {
 
     // klarEnv['CLAIR_ADDR'] = 'http://13.71.116.186:6060';
     klarEnv['CLAIR_ADDR'] = 'http://localhost:6060';
+    klarEnv['DOCKER_INSECURE'] = 'true';
 
     const whitelistFile = await getWhitelistFilePath();
     if (whitelistFile) {
@@ -260,8 +266,19 @@ async function run() {
       outStream: stdOutStream,
       ignoreReturnCode: true
     };
+
+    
+    const dockerHelper = new DockerHelper();
+    // Tag and push local image
+    console.log('Tagging local image...');
+    await dockerHelper.executeDockerCommand([ 'tag', imageToScan, 'localhost:5000/containerscan:temp' ]);
+    console.log('Tagged local image...');
+
+    console.log('Pushing image to local registry...');
+    await dockerHelper.executeDockerCommand([ 'push', 'localhost:5000/containerscan:temp' ]);
+    console.log('Pushed image to local registry...');
   
-    const toolRunner = new ToolRunner(klarDownloadPath, [ imageToScan ], options);
+    const toolRunner = new ToolRunner(klarDownloadPath, [ 'localhost:5000/containerscan:temp' ], options);
     const code = await toolRunner.exec();
     
     console.log(klarOutput);
