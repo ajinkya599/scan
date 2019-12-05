@@ -146,15 +146,13 @@ async function run() {
     // });
 
     var klarEnv: { [key: string]: string ; } = {};
-    // klarEnv = Object.assign({}, process.env);
-    for (let key in process.env) {
-      klarEnv[key] = process.env[key] || '';
-    }
+    // for (let key in process.env) {
+    //   klarEnv[key] = process.env[key] || '';
+    // }
 
     klarEnv['CLAIR_ADDR'] = 'http://13.71.116.186:6060';
 
     const whitelistFile = await getWhitelistFilePath();
-    // const whitelistFile = core.getInput('whitelist-file');
     if (whitelistFile) {
       klarEnv['WHITELIST_FILE'] = whitelistFile;
     }
@@ -165,6 +163,11 @@ async function run() {
     if (username && password) {
       klarEnv['DOCKER_USER'] = username;
       klarEnv['DOCKER_PASSWORD'] = password;
+    }
+
+    const severityThreshold = core.getInput('severity-threshold');
+    if (severityThreshold) {
+      klarEnv['CLAIR_OUTPUT'] = severityThreshold;
     }
 
     const options: ExecOptions = {

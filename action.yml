@@ -17,6 +17,8 @@ inputs:
     description: 'Pass GITHUB_TOKEN. Task needs to access contents of the repo'
   whitelist-from-branch:
     description: 'The branch to read the whitelist from'
+  severity-threshold:
+    description: 'The severity level threshold. Vulnerabilities with severity level higher than or equal to this threshold will be outputted. Supported levels are Unknown, Negligible, Low, Medium, High, Critical, Defcon1. Default is Unknown.'
 
 outputs:
   scan-report:
